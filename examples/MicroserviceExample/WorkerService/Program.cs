@@ -17,6 +17,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Utils.Messaging;
 
@@ -37,10 +38,22 @@ namespace WorkerService
 
                     services.AddSingleton<MessageReceiver>();
 
+                    AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
                     services.AddOpenTelemetryTracing((builder) =>
                     {
                         builder
+                            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Test service"))
                             .AddSource(nameof(MessageReceiver))
+                            .AddOtlpExporter(otlpOptions =>
+                            {
+                                var apmHostName = Environment.GetEnvironmentVariable("APM_HOSTNAME") ?? "localhost";
+                                otlpOptions.Endpoint = new Uri($"http://{apmHostName}:8200");
+                            })
+                            .AddConsoleExporter(c =>
+                            {
+                                c.Targets = OpenTelemetry.Exporter.ConsoleExporterOutputTargets.Console;
+                            })
                             .AddZipkinExporter(b =>
                             {
                                 var zipkinHostName = Environment.GetEnvironmentVariable("ZIPKIN_HOSTNAME") ?? "localhost";

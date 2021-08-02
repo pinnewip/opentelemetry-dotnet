@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Utils.Messaging;
 
@@ -40,9 +41,24 @@ namespace WebApi
 
             services.AddSingleton<MessageSender>();
 
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+            services.AddControllers();
+
             services.AddOpenTelemetryTracing((builder) => builder
                 .AddAspNetCoreInstrumentation()
+                .SetSampler(new AlwaysOnSampler())
+                .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Webapi test api"))
                 .AddSource(nameof(MessageSender))
+                .AddConsoleExporter(c =>
+                {
+                    c.Targets = OpenTelemetry.Exporter.ConsoleExporterOutputTargets.Console;
+                })
+                .AddOtlpExporter(otlpOptions =>
+                {
+                    var apmHostName = Environment.GetEnvironmentVariable("APM_HOSTNAME") ?? "localhost";
+                    otlpOptions.Endpoint = new Uri($"http://{apmHostName}:8200");
+                })
                 .AddZipkinExporter(b =>
                 {
                     var zipkinHostName = Environment.GetEnvironmentVariable("ZIPKIN_HOSTNAME") ?? "localhost";
